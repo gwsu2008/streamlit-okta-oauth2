@@ -78,7 +78,7 @@ class Okta:
             st.stop()
         else:
             logging.debug("/token call success")
-            st.experimental_set_query_params(**{})
+            # st.query_params.get_all()
             tokens = response.json()
 
             return tokens
@@ -179,14 +179,18 @@ class Okta:
 
         requests.post(url=OKTA_REVOKE_ENDPOINT,
                       data=access_token_revoke_data, headers=self.headers)
-
-        refresh_token_revoke_data = {
-            'token': tokens["refresh_token"],
-            'token_type_hint': "refresh_token"
-        }
-
-        requests.post(url=OKTA_REVOKE_ENDPOINT,
+        logging.debug("Revoke access token.")
+        try:
+            refresh_token_revoke_data = {
+                'token': tokens["refresh_token"],
+                'token_type_hint': "refresh_token"
+            }
+            requests.post(url=OKTA_REVOKE_ENDPOINT,
                       data=refresh_token_revoke_data, headers=self.headers)
+            logging.debug("Revoke refresh token.")
+        except KeyError:
+            logging.debug("No refresh token available.")
+            pass
 
         if 'token' in st.session_state:
             del st.session_state['token']
@@ -197,5 +201,14 @@ class Okta:
                 "verify_signature": False})
 
             return user_context
+
+        return None
+
+    def get_user_info(self):
+        if 'token' in st.session_state:
+            user_info = jwt.decode(st.session_state['token']['id_token'], options={
+                "verify_signature": False})
+
+            return user_info
 
         return None

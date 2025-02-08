@@ -24,13 +24,18 @@ import logging
 
 def app(okta, tokens, callback):
     # clean out the query parameters
-    st.experimental_set_query_params(**{})
+    st.query_params.clear()
     oauth_component(event='REMOVE_STATE')
 
     decoded_token = okta.get_user_context()
+    user_info = okta.get_user_info()
 
     # expiry epoch time in UTC
     exp_time = float(decoded_token['exp'])
+
+    # save user name and email in session state
+    st.session_state['user_email'] = user_info['email']
+    st.session_state['user_name'] = user_info['name']
 
     # current epoch time in UTC
     current_time = time.time()
@@ -40,7 +45,12 @@ def app(okta, tokens, callback):
         okta.verify_tokens_from_okta(
             access_token=tokens['access_token'], refresh_token=tokens['refresh_token'])
 
-    # Browser / Tab Close Event
+    # Browser / Tab Close Event - Just revoke the access token
+    # st.button("revoke", on_click=okta.invalidate_token_from_okta,
+    #           kwargs=st.session_state['token'])
+    # oauth_component(event='HIDE_REVOKE_BUTTON')
+
+    # Browser / Tab Close Event - Force user to reauthenticate
     st.button("revoke", on_click=okta.invalidate_token_from_okta,
               kwargs=st.session_state['token'])
     oauth_component(event='HIDE_REVOKE_BUTTON')
@@ -74,27 +84,23 @@ def okta_login_wrapper(config, callback):
     if 'token' not in st.session_state:
         local_storage = oauth_component(event='GET_LOCAL_STORAGE')
         if local_storage:
-            if 'error' in st.experimental_get_query_params():
-                st.warning(st.experimental_get_query_params()
-                           ['error_description'][0])
+            if 'error' in st.query_params:
+                st.warning(st.query_params['error_description'])
                 st.stop()
 
-            if "code" in st.experimental_get_query_params() and "state" in st.experimental_get_query_params():
+            if "code" in st.query_params and "state" in st.query_params:
                 st.info('Please Wait...')
-                authorization_code = st.experimental_get_query_params()[
-                    "code"][0]
+                authorization_code = st.query_params["code"]
 
-                authorization_state = st.experimental_get_query_params()[
-                    "state"][0]
+                authorization_state = st.query_params["state"]
 
                 if 'state' in local_storage and authorization_state == local_storage['state']:
                     tokens = okta.get_tokens_from_okta(authorization_code)
 
                     st.session_state['token'] = tokens
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
-                    st.warning(
-                        "Something wrong. Please try to login again..")
+                    st.warning("Something wrong. Please try to login again..")
                     st.stop()
             else:
                 state = string_utils.generate_random_cryptographic_string()
